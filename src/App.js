@@ -20,6 +20,14 @@ const ADD_STAR = `
   }
 `;
 
+const REMOVE_STAR = `
+  mutation ($repositoryId: ID!) {
+    removeStar(input: {starrableId: $repositoryId}) {
+      starrable { viewerHasStarred }
+    }
+  }
+`;
+
 const GET_ISSUES_OF_REPOSITORY = `
 query ($organization: String!, $repository: String!, $cursor: String) {
   organization(login: $organization) {
@@ -76,6 +84,13 @@ const addStarToRepository = repositoryId => {
   });
 };
 
+const removeStarToRepository = repositoryId => {
+  return axiosGitHubGraphQL.post('', {
+    query: REMOVE_STAR,
+    variables: { repositoryId }
+  });
+}
+
 const resolveIssuesQuery = (queryResult, cursor) => (state) => {
   const { data, errors } = queryResult.data;
 
@@ -121,6 +136,23 @@ const resolveAddStarMutation = mutationResult => state => {
   };
 };
 
+// Needs refactoring (later, almost same code as resolveAddStarMutation)
+const resolveRemoveStarMutation = mutationResult => state => {
+  const { viewerHasStarred } = mutationResult.data.data.removeStar.starrable;
+  const { totalCount } = state.organization.repository.stargazers;
+  return {
+    ...state,
+    organization: {
+      ...state.organization,
+      repository: {
+        ...state.organization.repository,
+        viewerHasStarred,
+        stargazers: { totalCount: totalCount - 1 }
+      }
+    }
+  }; 
+}
+
 class App extends Component {
   state = {
     path: 'the-road-to-learn-react/the-road-to-learn-react',
@@ -129,9 +161,15 @@ class App extends Component {
   };
 
   onStarRepository = (repositoryId, viewerHasStarred) => {
-    addStarToRepository(repositoryId).then(mutationResult => 
-      this.setState(resolveAddStarMutation(mutationResult))
-    );
+    if (viewerHasStarred) {
+      removeStarToRepository(repositoryId).then(mutationResult =>
+        this.setState(resolveRemoveStarMutation(mutationResult))  
+      );
+    } else {
+      addStarToRepository(repositoryId).then(mutationResult => 
+        this.setState(resolveAddStarMutation(mutationResult))
+      );
+    }
   };
   
   onFetchMoreIssues = () => {
